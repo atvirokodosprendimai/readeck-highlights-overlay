@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Readeck Highlights Overlay
 // @namespace    readeck-overlay
-// @version      0.7.1
+// @version      0.7.2
 // @description  Local-first Readeck highlights with a popup cloned from Readeck's own in-app highlight menu. Server + token are set once via the menu and kept in manager storage, so updates never wipe them. English UI by default, switchable in the menu; highlight mode is off until toggled per site.
 // @updateURL    https://raw.githubusercontent.com/atvirokodosprendimai/readeck-highlights-overlay/main/readeck-highlights-overlay.user.js
 // @downloadURL  https://raw.githubusercontent.com/atvirokodosprendimai/readeck-highlights-overlay/main/readeck-highlights-overlay.user.js
@@ -82,6 +82,8 @@
       'menu.test': 'Readeck: test connection',
       'menu.retry': 'Readeck: retry failed sync',
       'menu.diag': 'Readeck: diagnostics',
+      'menu.version': (v) => 'Readeck: v' + v,
+      'version.status': (v) => 'Script version: v' + v + ' (shown in the button tooltip and this menu).',
       'err.noGm': 'GM_xmlhttpRequest is not supported by this userscript manager. Use Tampermonkey (Chrome) or Violentmonkey (Firefox).',
       'err.badJson': 'Bad JSON from Readeck',
       'err.tokenRejected': (s) => 'Readeck rejected the token (' + s + '). Check it in the script menu ("Readeck: set server and token"); saving/creating/deleting needs the "bookmarks write" scope.',
@@ -104,7 +106,7 @@
       'diag.missing': 'MISSING',
       'diag.present': 'set',
       'diag.notSaved': 'not saved',
-      'diag.line': (o) => 'Manager: ' + o.mgr + ' | server: ' + o.origin + ' | token: ' + o.token +
+      'diag.line': (o) => 'Script: v' + o.ver + ' | manager: ' + o.mgr + ' | server: ' + o.origin + ' | token: ' + o.token +
         ' | server index: ' + o.bmN + ' pages, ' + o.idxN + ' hl.' +
         ' | local: ' + o.localN + ' hl., queued: ' + o.pend + ', failed: ' + o.failed +
         ' | page: ' + o.page + ' | key: ' + o.key,
@@ -159,6 +161,8 @@
       'menu.test': 'Readeck: patikrinti ryšį',
       'menu.retry': 'Readeck: pakartoti nepavykusią sinchronizaciją',
       'menu.diag': 'Readeck: diagnostika',
+      'menu.version': (v) => 'Readeck: v' + v,
+      'version.status': (v) => 'Script’o versija: v' + v + ' (matosi mygtuko paaiškinime ir šiame meniu).',
       'err.noGm': 'GM_xmlhttpRequest nepalaikomas šiame script’u tvarkytuvėje. Naudok Tampermonkey (Chrome) arba Violentmonkey (Firefox).',
       'err.badJson': 'Bad JSON from Readeck',
       'err.tokenRejected': (s) => 'Readeck atmete token’ą (' + s + '). Patikrink jį script’o meniu („Readeck: nustatyti serverį ir token’ą“); saugojant/kuriant/trinant reikia „bookmarks write“ teisės.',
@@ -181,7 +185,7 @@
       'diag.missing': 'NĖRA',
       'diag.present': 'yra',
       'diag.notSaved': 'neišsaugotas',
-      'diag.line': (o) => 'Tvarkytuvas: ' + o.mgr + ' | serveris: ' + o.origin + ' | token’as: ' + o.token +
+      'diag.line': (o) => 'Script’as: v' + o.ver + ' | tvarkytuvas: ' + o.mgr + ' | serveris: ' + o.origin + ' | token’as: ' + o.token +
         ' | serverio indeksas: ' + o.bmN + ' psl., ' + o.idxN + ' hl.' +
         ' | lokalus: ' + o.localN + ' hl., laukia: ' + o.pend + ', nepavyko: ' + o.failed +
         ' | puslapis: ' + o.page + ' | raktas: ' + o.key,
@@ -204,7 +208,7 @@
     LANG = code;
     await gmSet('rd_lang', code);
     const btn = document.querySelector('#rd-hl-btn');
-    if (btn) btn.title = t('badge.title');
+    if (btn) btn.title = badgeTitle();
     setStatus(t('lang.switched', code), false);
   }
 
@@ -277,6 +281,13 @@
     if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand(label, fn);
     else if (typeof GM !== 'undefined' && GM.registerMenuCommand) GM.registerMenuCommand(label, fn);
   }
+
+  // Loaded script version (from the manager via GM_info), shown in the
+  // bottom-right button tooltip and as a menu entry, so it is always visible
+  // at a glance which version is running on the page.
+  const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version)
+    ? String(GM_info.script.version) : '?';
+  function badgeTitle() { return t('badge.title') + ' · v' + SCRIPT_VERSION; }
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
   // ---- URL normalization ---------------------------------------------------
@@ -951,7 +962,7 @@
       if (ev.shiftKey) { if (!HL_ON) await setHlMode(true); run(true); return; }
       toggleHlMode();
     });
-    el.querySelector('#rd-hl-btn').title = t('badge.title');
+    el.querySelector('#rd-hl-btn').title = badgeTitle();
     return el;
   }
 
@@ -1474,6 +1485,7 @@
     const failed = localAll.filter(e => e.state === 'failed').length;
     const { bm } = pageBookmark();
     setStatus(t('diag.line', {
+      ver: SCRIPT_VERSION,
       mgr,
       origin: ORIGIN || t('diag.missing'),
       token: tokenOk ? t('diag.present') : t('diag.missing'),
@@ -1492,6 +1504,7 @@
   gmMenu(t('menu.test'), testConnection);
   gmMenu(t('menu.retry'), retryFailed);
   gmMenu(t('menu.diag'), diagnostics);
+  gmMenu(t('menu.version', SCRIPT_VERSION), () => setStatus(t('version.status', SCRIPT_VERSION), false));
 
   setInterval(() => { if (queue.length) processQueue(); }, RETRY_MS);
   window.addEventListener('online', () => processQueue());
@@ -1506,3 +1519,4 @@
   if (document.body) init();
   else window.addEventListener('DOMContentLoaded', init, { once: true });
 })();
+

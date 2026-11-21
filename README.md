@@ -14,11 +14,26 @@ A userscript that adds Readwise Reader-style highlights to [Readeck](https://rea
 1. Install a userscript manager (Tampermonkey or Violentmonkey) in your desktop browser.
 2. Open the raw script and the manager will offer to install it:
    https://raw.githubusercontent.com/atvirokodosprendimai/readeck-highlights-overlay/main/readeck-highlights-overlay.user.js
-3. On any page, open the script manager menu and pick "Readeck: nustatyti serverį ir token'ą", then enter:
+3. On any page, open the script manager menu and pick "Readeck: set server and token", then enter:
    - your Readeck server URL (e.g. `https://readeck.example.com`),
    - an API token from Readeck → Profile → API tokens, with the **bookmarks write** scope (needed to save articles and create highlights).
 
 The server URL and token are kept in the userscript manager's storage, not in this file, so script updates never wipe them and no personal data is published here.
+
+## Highlight mode (off by default)
+
+Highlight mode is **off** on every site until you turn it on, so selecting text to copy or paste is never interrupted by the highlight popup.
+
+- Click the round button in the bottom-right corner to toggle highlight mode for the current site. The choice is remembered per site.
+- The button is dimmed while highlight mode is off.
+- Shift+click the button forces a full sync (this also turns highlight mode on).
+- The same toggle is in the script manager menu: "Readeck: highlight mode on/off (this site)".
+
+## Language
+
+The UI is in **English by default**. To switch, open the script manager menu and pick "Readeck: language / kalba", then enter a language code (currently `en` and `lt`). The choice is kept in manager storage.
+
+To add a language, copy the `en` block in the `LANGS` table at the top of the script under a new key (e.g. `de`) and translate the values. The new code works in the language prompt right away; any missing string falls back to English.
 
 ## Limits
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Readeck Highlights Overlay
 // @namespace    readeck-overlay
-// @version      0.7.2
+// @version      0.7.3
 // @description  Local-first Readeck highlights with a popup cloned from Readeck's own in-app highlight menu. Server + token are set once via the menu and kept in manager storage, so updates never wipe them. English UI by default, switchable in the menu; highlight mode is off until toggled per site.
 // @updateURL    https://raw.githubusercontent.com/atvirokodosprendimai/readeck-highlights-overlay/main/readeck-highlights-overlay.user.js
 // @downloadURL  https://raw.githubusercontent.com/atvirokodosprendimai/readeck-highlights-overlay/main/readeck-highlights-overlay.user.js
@@ -985,15 +985,24 @@
 
   function refreshBadge() {
     const failed = Object.values(replica || {}).flat().filter(e => e.state === 'failed').length;
-    if (failed > 0) { setBadge('!', '#b71c1c'); return; }
-    if (queue && queue.length > 0) { setBadge('\u21e1' + queue.length, '#e65100'); return; }
     const left = document.querySelectorAll('mark.rd-hl').length;
-    if (left) { setBadge(String(left), '#2e7d32'); return; }
     const { bm } = pageBookmark();
-    if (bm) setBadge('+', '#4a90d9'); // bookmarked, no highlights yet
+    if (failed > 0) setBadge('!', '#b71c1c');
+    else if (queue && queue.length > 0) setBadge('\u21e1' + queue.length, '#e65100');
+    else if (left) setBadge(String(left), '#2e7d32');
+    else if (bm) setBadge('+', '#4a90d9'); // bookmarked, no highlights yet
     else setBadge('R', '#4a4a4a');
     const btn = document.querySelector('#rd-hl-btn');
-    if (btn) btn.style.opacity = HL_ON ? '1' : '0.55';
+    if (btn) {
+      btn.style.opacity = HL_ON ? '1' : '0.55';
+      // "No highlights on this page" is a normal state, not an error, so it
+      // never pops up; it is only noted in the button tooltip.
+      let tip = badgeTitle();
+      if (!left && !pageEntries().length) {
+        tip += ' \u00b7 ' + (bm ? t('overlay.hasBmNoHl') : t('overlay.noHl', candidateUrls()[0]));
+      }
+      btn.title = tip;
+    }
   }
 
   let popShownAt = 0;
@@ -1379,13 +1388,9 @@
     const entries = pageEntries();
     clearButKeepBadge();
     if (!entries.length) {
+      // A page without highlights is a normal state, not an error: no status
+      // popup. refreshBadge() puts the neutral note in the button tooltip.
       refreshBadge();
-      if (verbose) {
-        const { bm } = pageBookmark();
-        setStatus(bm
-          ? t('overlay.hasBmNoHl')
-          : t('overlay.noHl', candidateUrls()[0]), false);
-      }
       return;
     }
     const { placed, missed } = overlayHighlights(entries);

@@ -9,6 +9,7 @@ A userscript that adds Readwise Reader-style highlights to [Readeck](https://rea
 - If the article isn't in your Readeck yet, the script saves it first.
 - Local-first: highlights work offline and replicate to your Readeck server in the background.
 - The loaded script version is visible at a glance: in the bottom-right button's tooltip and as a "Readeck: v..." entry in the script manager menu (also in diagnostics).
+- A page without highlights stays quiet: no popup, only a neutral note in the bottom-right button's tooltip.
 
 ## Install
 

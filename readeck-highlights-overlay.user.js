@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Readeck Highlights Overlay
 // @namespace    readeck-overlay
-// @version      0.7.3
+// @version      0.7.4
 // @description  Local-first Readeck highlights with a popup cloned from Readeck's own in-app highlight menu. Server + token are set once via the menu and kept in manager storage, so updates never wipe them. English UI by default, switchable in the menu; highlight mode is off until toggled per site.
 // @updateURL    https://raw.githubusercontent.com/atvirokodosprendimai/readeck-highlights-overlay/main/readeck-highlights-overlay.user.js
 // @downloadURL  https://raw.githubusercontent.com/atvirokodosprendimai/readeck-highlights-overlay/main/readeck-highlights-overlay.user.js
@@ -984,7 +984,9 @@
   }
 
   function refreshBadge() {
-    const failed = Object.values(replica || {}).flat().filter(e => e.state === 'failed').length;
+    // '!' is for real errors on THIS page: failed entries from other pages
+    // must not paint the badge here, so a page with no highlights stays neutral.
+    const failed = candidateUrls().flatMap(k => (replica && replica[k]) || []).filter(e => e.state === 'failed').length;
     const left = document.querySelectorAll('mark.rd-hl').length;
     const { bm } = pageBookmark();
     if (failed > 0) setBadge('!', '#b71c1c');

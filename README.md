@@ -10,6 +10,7 @@ A userscript that adds Readwise Reader-style highlights to [Readeck](https://rea
 - Local-first: highlights work offline and replicate to your Readeck server in the background.
 - The loaded script version is visible at a glance: in the bottom-right button's tooltip and as a "Readeck: v..." entry in the script manager menu (also in diagnostics).
 - A page without highlights stays quiet: no popup, only a neutral note in the bottom-right button's tooltip.
+- The button shows a red "!" only for a real error on the current page (a highlight there failed to sync). Failures from other pages never paint the badge; use the menu's "Readeck: retry failed sync" to requeue them.
 
 ## Install
 
@@ -26,7 +27,7 @@ The server URL and token are kept in the userscript manager's storage, not in th
 
 Highlight mode is **off** on every site until you turn it on, so selecting text to copy or paste is never interrupted by the highlight popup.
 
-- Click the round button in the bottom-right corner to toggle highlight mode for the current site. The choice is remembered per site.
+- Click the round button in the bottom-right corner to toggle highlight mode for the current site. The choice is remembered per site in the userscript manager's storage under the key `rd_hlon_<hostname>` (e.g. `rd_hlon_example.com`; boolean, missing = off). Inspect or reset it in Tampermonkey/Violentmonkey: Dashboard → the script → Storage tab.
 - The button is dimmed while highlight mode is off.
 - Shift+click the button forces a full sync (this also turns highlight mode on).
 - The same toggle is in the script manager menu: "Readeck: highlight mode on/off (this site)".

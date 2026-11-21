@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Readeck Highlights Overlay
 // @namespace    readeck-overlay
-// @version      0.7.0
+// @version      0.7.1
 // @description  Local-first Readeck highlights with a popup cloned from Readeck's own in-app highlight menu. Server + token are set once via the menu and kept in manager storage, so updates never wipe them. English UI by default, switchable in the menu; highlight mode is off until toggled per site.
 // @updateURL    https://raw.githubusercontent.com/atvirokodosprendimai/readeck-highlights-overlay/main/readeck-highlights-overlay.user.js
 // @downloadURL  https://raw.githubusercontent.com/atvirokodosprendimai/readeck-highlights-overlay/main/readeck-highlights-overlay.user.js
@@ -385,8 +385,19 @@
   const apiDelete = (path) => apiRequest('DELETE', path, null, false);
 
   // ---- Text helpers ----------------------------------------------------------
-  const FOLD = { '\u2018': "'", '\u2019': "'", '\u201C': '"', '\u201D': '"', '\u2013': '-', '\u2014': '-', '\u00A0': ' ' };
-  function foldText(str) { return String(str).replace(/[\u2018\u2019\u201C\u201D\u2013\u2014\u00A0]/g, c => FOLD[c]); }
+  // Single-char folds only: buildTextMap's char->position map assumes 1 char in = 1 char out.
+  const FOLD = {
+    '\u2018': "'", '\u2019': "'", '\u201A': "'", '\u201B': "'", '\u2032': "'", '\u2039': "'", '\u203A': "'",
+    '\u201C': '"', '\u201D': '"', '\u201E': '"', '\u201F': '"', '\u2033': '"', '\u00AB': '"', '\u00BB': '"',
+    '\u2010': '-', '\u2011': '-', '\u2012': '-', '\u2013': '-', '\u2014': '-', '\u2015': '-', '\u2212': '-',
+    '\u2026': '.', '\u00A0': ' ', '\u2002': ' ', '\u2003': ' ', '\u2007': ' ', '\u2009': ' ', '\u202F': ' ',
+  };
+  // Invisible chars dropped on both sides before matching (soft hyphen, zero-width spaces, word joiner, BOM).
+  const DROP_CHARS = new Set(['\u00AD', '\u200B', '\u200C', '\u200D', '\u2060', '\uFEFF']);
+  const DROP_RE = /[\u00AD\u200B\u200C\u200D\u2060\uFEFF]/g;
+  function foldText(str) {
+    return String(str).replace(DROP_RE, '').replace(/[\u2018\u2019\u201A\u201B\u2032\u2039\u203A\u201C\u201D\u201E\u201F\u2033\u00AB\u00BB\u2010\u2011\u2012\u2013\u2014\u2015\u2212\u2026\u00A0\u2002\u2003\u2007\u2009\u202F]/g, c => FOLD[c]);
+  }
   function normText(str) { return foldText(str).replace(/\s+/g, ' ').trim(); }
 
   // ---- Local stores ------------------------------------------------------------
@@ -545,7 +556,9 @@
         let el = node.parentElement;
         if (!el || SKIP_TAGS.has(el.tagName)) return NodeFilter.FILTER_REJECT;
         if (el.closest('#rd-hl-panel') || el.closest('#rd-hl-pop')) return NodeFilter.FILTER_REJECT;
-        if (!node.data.trim()) return NodeFilter.FILTER_REJECT;
+        // Whitespace-only text nodes stay: they are the spaces between block
+        // elements (</p>\n<p>), which a browser selection DOES include. Dropping
+        // them made every cross-paragraph highlight unfindable in the article.
         return NodeFilter.FILTER_ACCEPT;
       },
     });
@@ -559,6 +572,7 @@
     for (const node of nodes) {
       const data = node.data;
       for (let i = 0; i < data.length; i++) {
+        if (DROP_CHARS.has(data[i])) continue;
         const ch = FOLD[data[i]] || data[i];
         if (/\s/.test(ch)) {
           if (text.length > 0 && !pendingSpace) pendingSpace = { node, offset: i };
@@ -570,6 +584,38 @@
       }
     }
     return { text, map };
+  }
+
+  // Find a needle in a built text map. Exact match first; then a
+  // whitespace-insensitive (squashed) match; then, for long needles, a
+  // prefix/suffix anchor match that tolerates mid-text differences between
+  // the live page and Readeck's stored article. Returns { from, to } as
+  // positions in the folded text (to is exclusive), or null.
+  function findNeedle(text, needle) {
+    let idx = text.indexOf(needle);
+    if (idx !== -1) return { from: idx, to: idx + needle.length };
+    const sqChars = [];
+    const pos = [];
+    for (let i = 0; i < text.length; i++) {
+      if (!/\s/.test(text[i])) { sqChars.push(text[i]); pos.push(i); }
+    }
+    const sq = sqChars.join('');
+    const sqNeedle = needle.replace(/\s+/g, '');
+    if (!sqNeedle) return null;
+    idx = sq.indexOf(sqNeedle);
+    if (idx !== -1) return { from: pos[idx], to: pos[idx + sqNeedle.length - 1] + 1 };
+    if (sqNeedle.length >= 40) {
+      const k = Math.min(24, sqNeedle.length >> 1);
+      const head = sqNeedle.slice(0, k);
+      const tail = sqNeedle.slice(-k);
+      let hs = sq.indexOf(head);
+      while (hs !== -1) {
+        const te = sq.indexOf(tail, hs + head.length);
+        if (te !== -1) return { from: pos[hs], to: pos[te + tail.length - 1] + 1 };
+        hs = sq.indexOf(head, hs + 1);
+      }
+    }
+    return null;
   }
 
   // Readeck's exact palette (light theme), taken from its own stylesheet:
@@ -647,17 +693,21 @@
     for (const h of highlights) {
       const needle = normText(h.text);
       if (!needle) { missed++; continue; }
-      let idx = -1, from = 0;
+      let idx = -1, from = 0, sawExact = false;
       for (;;) {
         idx = text.indexOf(needle, from);
         if (idx === -1) break;
+        sawExact = true;
         const covered = used.some(([a, b]) => idx < b && idx + needle.length > a);
         if (!covered) break;
         from = idx + 1;
       }
-      if (idx === -1) { missed++; continue; }
-      used.push([idx, idx + needle.length]);
-      jobs.push({ from: idx, to: idx + needle.length, h });
+      let range = null;
+      if (idx !== -1) range = { from: idx, to: idx + needle.length };
+      else if (!sawExact) range = findNeedle(text, needle); // fuzzy only when nothing exact exists
+      if (!range) { missed++; continue; }
+      used.push([range.from, range.to]);
+      jobs.push({ from: range.from, to: range.to, h });
     }
     // Wrap from the end of the page backwards: each splitText then happens
     // after every remaining range, so earlier map offsets stay valid.
@@ -703,10 +753,10 @@
     const root = doc.body;
     if (!root) throw new Error(t('err.emptyArticle'));
     const { text, map } = buildTextMap(root);
-    const idx = text.indexOf(needle);
-    if (idx === -1) throw new Error(t('err.textNotFound'));
-    const start = map[idx];
-    const end = map[idx + needle.length - 1];
+    const hit = findNeedle(text, needle);
+    if (!hit) throw new Error(t('err.textNotFound'));
+    const start = map[hit.from];
+    const end = map[hit.to - 1];
     if (!start || !end) throw new Error(t('err.textMapShort'));
     const startEl = start.node.parentElement;
     const endEl = end.node.parentElement;
